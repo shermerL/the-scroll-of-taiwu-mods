@@ -1,0 +1,15 @@
+**/bin/
+**/obj/
+**/.DS_Store
+**/TaiwuJiaJiaJia.log
+**/ItemCache.tsv
+**/TaiwuJiaJiaJia.settings.ini
+
+# Local analysis and reverse-engineering outputs should stay out of the repo.
+decompiled/
+tools/
+build/
+
+# Steam/game generated files.
+*.log
+*.tmp
