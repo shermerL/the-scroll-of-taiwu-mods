@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>Taiwu_EventPackage_GoodPartnerAya</AssemblyName>
+    <RootNamespace>Taiwu_EventPackage_GoodPartnerAya</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="GameData">
+      <HintPath>/Users/shermer/Library/CloudStorage/OneDrive-个人/MakeMod/The Scroll Of Taiwu/Backend/GameData.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="GameData.ArchiveData">
+      <HintPath>/Users/shermer/Library/CloudStorage/OneDrive-个人/MakeMod/The Scroll Of Taiwu/Backend/GameData.ArchiveData.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="GameData.Common">
+      <HintPath>/Users/shermer/Library/CloudStorage/OneDrive-个人/MakeMod/The Scroll Of Taiwu/Backend/GameData.Common.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="GameData.Serializer">
+      <HintPath>/Users/shermer/Library/CloudStorage/OneDrive-个人/MakeMod/The Scroll Of Taiwu/Backend/GameData.Serializer.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="GameData.Shared">
+      <HintPath>/Users/shermer/Library/CloudStorage/OneDrive-个人/MakeMod/The Scroll Of Taiwu/Backend/GameData.Shared.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="GameData.Utilities">
+      <HintPath>/Users/shermer/Library/CloudStorage/OneDrive-个人/MakeMod/The Scroll Of Taiwu/Backend/GameData.Utilities.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+</Project>

@@ -5,6 +5,7 @@
 ## Mods
 
 - `TaiwuJiaJiaJia/`：太吾加加加，游戏内物品添加工具。
+- `TaiwuGoodPartnerAyaYa/`：太吾好伙伴阿雅，官方事件包方向的特殊伙伴 Mod。
 
 ## 说明
 

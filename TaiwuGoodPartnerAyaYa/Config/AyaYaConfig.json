@@ -1,0 +1,26 @@
+{
+  "introEnabled": true,
+  "purifyCooldownMonths": 6,
+  "combatSupport": {
+    "enabled": true,
+    "presetTeammateCommandIds": [7, 6],
+    "useVanillaCosts": true
+  },
+  "loadout": {
+    "weaponTemplateIds": [505],
+    "armorTemplateIds": [39],
+    "clothingTemplateIds": [24],
+    "accessoryTemplateIds": [38],
+    "medicineTemplateIds": [
+      {
+        "templateId": 95,
+        "count": 3
+      }
+    ]
+  },
+  "assetPaths": {
+    "eventPortrait": "Assets/Images/ayaya-event-portrait-taiwu-style.png",
+    "avatarData": "TaiwuGoodPartnerAya/Aya.txt",
+    "workshopCover": "workshop/WorkshopCover.jpg"
+  }
+}
