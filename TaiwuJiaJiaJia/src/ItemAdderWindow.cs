@@ -6,6 +6,7 @@ using Config;
 using GameData.Domains.Item;
 using GameData.Utilities;
 using UnityEngine;
+using UnityEngine.UI;
 
 public sealed class ItemAdderWindow : MonoBehaviour
 {
@@ -45,6 +46,7 @@ public sealed class ItemAdderWindow : MonoBehaviour
     private readonly Dictionary<string, Sprite> _iconSprites = new Dictionary<string, Sprite>();
     private readonly HashSet<string> _requestedIconNames = new HashSet<string>();
     private ModSettings _settings = ModSettings.CreateDefault();
+    private GameObject _inputBlockerRoot;
     private Rect _windowRect = new Rect(40f, 55f, 1280f, 760f);
     private Vector2 _scroll;
     private Vector2 _detailScroll;
@@ -84,7 +86,17 @@ public sealed class ItemAdderWindow : MonoBehaviour
         _settings = ModSettings.Load();
         _toggleKey = _settings.ToggleKey;
         _status = $"当前呼出/隐藏热键：{_toggleKey}。默认过滤剧情、任务、特殊物品。";
+        CreateInputBlocker();
         LoadInitialCache();
+    }
+
+    private void OnDestroy()
+    {
+        if (_inputBlockerRoot != null)
+        {
+            Destroy(_inputBlockerRoot);
+            _inputBlockerRoot = null;
+        }
     }
 
     private void Update()
@@ -123,6 +135,56 @@ public sealed class ItemAdderWindow : MonoBehaviour
         {
             _captureHotkey = false;
         }
+
+        SetInputBlockerVisible(_visible);
+    }
+
+    private void CreateInputBlocker()
+    {
+        try
+        {
+            _inputBlockerRoot = new GameObject("TaiwuJiaJiaJia.InputBlocker");
+            _inputBlockerRoot.transform.SetParent(transform, worldPositionStays: false);
+
+            Canvas canvas = _inputBlockerRoot.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvas.sortingOrder = short.MaxValue;
+
+            _inputBlockerRoot.AddComponent<CanvasScaler>();
+            _inputBlockerRoot.AddComponent<GraphicRaycaster>();
+
+            CanvasGroup group = _inputBlockerRoot.AddComponent<CanvasGroup>();
+            group.alpha = 0f;
+            group.interactable = true;
+            group.blocksRaycasts = true;
+
+            GameObject imageObject = new GameObject("RaycastTarget");
+            imageObject.transform.SetParent(_inputBlockerRoot.transform, worldPositionStays: false);
+            RectTransform rectTransform = imageObject.AddComponent<RectTransform>();
+            rectTransform.anchorMin = Vector2.zero;
+            rectTransform.anchorMax = Vector2.one;
+            rectTransform.offsetMin = Vector2.zero;
+            rectTransform.offsetMax = Vector2.zero;
+
+            Image image = imageObject.AddComponent<Image>();
+            image.color = Color.clear;
+            image.raycastTarget = true;
+
+            SetInputBlockerVisible(visible: false);
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Warn("创建输入遮罩层失败，底层点击可能仍会穿透。", ex);
+            _inputBlockerRoot = null;
+        }
+    }
+
+    private void SetInputBlockerVisible(bool visible)
+    {
+        if (_inputBlockerRoot != null)
+        {
+            _inputBlockerRoot.SetActive(visible);
+        }
     }
 
     private void DrawWindow(int id)
@@ -130,39 +192,45 @@ public sealed class ItemAdderWindow : MonoBehaviour
         HandleWindowDrag();
         Rect content = new Rect(16f, 28f, _windowRect.width - 32f, _windowRect.height - 44f);
         GUI.Box(new Rect(8f, 24f, _windowRect.width - 16f, _windowRect.height - 32f), GUIContent.none, _listBoxStyle);
+        float leftWidth = content.width - DetailPanelWidth - MainDetailGap;
+        float detailX = content.x + leftWidth + MainDetailGap;
         float y = content.y;
 
         GUI.Label(new Rect(content.x, y, 50f, 22f), "分类");
-        DrawTypeButtons(new Rect(content.x + 54f, y, content.width - 54f, 52f));
+        DrawTypeButtons(new Rect(content.x + 54f, y, leftWidth - 54f, 52f));
         y += 58f;
 
         GUI.Label(new Rect(content.x, y, 50f, 22f), "品级");
-        DrawGradeButtons(new Rect(content.x + 54f, y, content.width - 54f, 24f));
+        DrawGradeButtons(new Rect(content.x + 54f, y, leftWidth - 54f, 24f));
         y += 32f;
 
-        GUI.Label(new Rect(content.x, y, 50f, 24f), "搜索");
-        string nextSearch = GUI.TextField(new Rect(content.x + 54f, y, content.width - 238f, 24f), _search ?? string.Empty, _textFieldStyle);
+        GUI.Label(new Rect(content.x, y + 2f, 50f, 24f), "搜索");
+        Rect searchRect = new Rect(content.x + 54f, y, leftWidth - 54f, 28f);
+        GUI.SetNextControlName("TaiwuJiaJiaJia.Search");
+        string nextSearch = GUI.TextField(searchRect, _search ?? string.Empty, _textFieldStyle);
+        if (string.IsNullOrEmpty(_search) && GUI.GetNameOfFocusedControl() != "TaiwuJiaJiaJia.Search")
+        {
+            GUI.Label(new Rect(searchRect.x + 10f, searchRect.y + 4f, searchRect.width - 20f, 22f), "名称或ID", _mutedStyle);
+        }
         if (nextSearch != _search)
         {
             _search = nextSearch;
             RebuildFiltered();
         }
 
-        bool nextShowBlocked = GUI.Toggle(new Rect(content.x + content.width - 190f, y, 128f, 24f), _showBlocked, "显示任务/特殊物品");
+        bool nextShowBlocked = GUI.Toggle(new Rect(detailX, y + 2f, 178f, 26f), _showBlocked, "显示任务/特殊物品");
         if (nextShowBlocked != _showBlocked)
         {
             _showBlocked = nextShowBlocked;
             RebuildFiltered();
         }
 
-        if (GUI.Button(new Rect(content.x + content.width - 58f, y, 58f, 24f), "刷新", _secondaryButtonStyle))
+        if (GUI.Button(new Rect(detailX + DetailPanelWidth - 72f, y, 72f, 28f), "刷新", _secondaryButtonStyle))
         {
             RefreshItemsIfNeeded(force: true);
         }
-        y += 32f;
+        y += 36f;
 
-        float leftWidth = content.width - DetailPanelWidth - MainDetailGap;
-        float detailX = content.x + leftWidth + MainDetailGap;
         float listTopY = y;
         GUI.Label(new Rect(content.x, y, 240f, 22f), $"物品列表：{_filtered.Count} / {_items.Count}");
         GUI.Label(new Rect(content.x + 250f, y, leftWidth - 250f, 22f), GetSelectedText(), _mutedStyle);

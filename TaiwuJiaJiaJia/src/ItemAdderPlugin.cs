@@ -1,7 +1,7 @@
 using TaiwuModdingLib.Core.Plugin;
 using UnityEngine;
 
-[PluginConfig("TaiwuJiaJiaJia", "Shermer", "0.1.13")]
+[PluginConfig("TaiwuJiaJiaJia", "Shermer", "0.1.15")]
 public sealed class ItemAdderPlugin : TaiwuRemakePlugin
 {
     private GameObject _host;

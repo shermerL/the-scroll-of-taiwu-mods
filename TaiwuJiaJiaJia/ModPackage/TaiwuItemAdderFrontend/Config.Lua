@@ -2,7 +2,7 @@ return {
     Title = "太吾加加加",
     Source = 0,
     FileId = 0,
-    Version = "0.1.13",
+    Version = "0.1.15",
     GameVersion = "1.0.52",
     BackendPlugins = {},
     BackendPatches = {},

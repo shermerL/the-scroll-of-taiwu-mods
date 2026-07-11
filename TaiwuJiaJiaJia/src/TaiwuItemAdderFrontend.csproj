@@ -33,5 +33,11 @@
     <Reference Include="UnityEngine.TextRenderingModule" Private="false">
       <HintPath>/Users/shermer/Library/CloudStorage/OneDrive-个人/MakeMod/The Scroll Of Taiwu/The Scroll of Taiwu_Data/Managed/UnityEngine.TextRenderingModule.dll</HintPath>
     </Reference>
+    <Reference Include="UnityEngine.UI" Private="false">
+      <HintPath>/Users/shermer/Library/CloudStorage/OneDrive-个人/MakeMod/The Scroll Of Taiwu/The Scroll of Taiwu_Data/Managed/UnityEngine.UI.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.UIModule" Private="false">
+      <HintPath>/Users/shermer/Library/CloudStorage/OneDrive-个人/MakeMod/The Scroll Of Taiwu/The Scroll of Taiwu_Data/Managed/UnityEngine.UIModule.dll</HintPath>
+    </Reference>
   </ItemGroup>
 </Project>
