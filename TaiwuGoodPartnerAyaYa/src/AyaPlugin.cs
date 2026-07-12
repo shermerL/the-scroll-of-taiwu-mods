@@ -9,7 +9,7 @@ using TaiwuModdingLib.Core.Plugin;
 
 namespace TaiwuGoodPartnerAya;
 
-[PluginConfig("TaiwuGoodPartnerAya", "Shermer", "0.1.16")]
+[PluginConfig("TaiwuGoodPartnerAya", "Shermer", "0.1.18")]
 public sealed class AyaPlugin : TaiwuRemakePlugin
 {
     private const string MethodPrefix = "TaiwuGoodPartnerAya.";
@@ -135,6 +135,12 @@ public sealed class AyaPlugin : TaiwuRemakePlugin
     {
         try
         {
+            if (_service == null)
+            {
+                ModLogger.Warning("阿雅服务尚未初始化，忽略接口调用。");
+                return;
+            }
+
             action(_service);
         }
         catch (Exception ex)
@@ -147,6 +153,15 @@ public sealed class AyaPlugin : TaiwuRemakePlugin
     {
         try
         {
+            if (_service == null)
+            {
+                var unavailable = new SerializableModData();
+                unavailable.Set("success", false);
+                unavailable.Set("code", "serviceUnavailable");
+                unavailable.Set("message", "阿雅服务尚未初始化。");
+                return unavailable;
+            }
+
             return action(_service);
         }
         catch (Exception ex)

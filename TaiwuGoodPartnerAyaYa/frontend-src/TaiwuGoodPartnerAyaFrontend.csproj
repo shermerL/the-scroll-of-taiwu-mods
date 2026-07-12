@@ -15,6 +15,9 @@
     <Reference Include="GameData.Shared" Private="false">
       <HintPath>/Users/shermer/Library/CloudStorage/OneDrive-个人/MakeMod/The Scroll Of Taiwu/The Scroll of Taiwu_Data/Managed/GameData.Shared.dll</HintPath>
     </Reference>
+    <Reference Include="0Harmony" Private="false">
+      <HintPath>/Users/shermer/Library/CloudStorage/OneDrive-个人/MakeMod/The Scroll Of Taiwu/The Scroll of Taiwu_Data/Managed/0Harmony.dll</HintPath>
+    </Reference>
     <Reference Include="TaiwuModdingLib" Private="false">
       <HintPath>/Users/shermer/Library/CloudStorage/OneDrive-个人/MakeMod/The Scroll Of Taiwu/The Scroll of Taiwu_Data/Managed/TaiwuModdingLib.dll</HintPath>
     </Reference>
@@ -23,6 +26,9 @@
     </Reference>
     <Reference Include="UnityEngine.CoreModule" Private="false">
       <HintPath>/Users/shermer/Library/CloudStorage/OneDrive-个人/MakeMod/The Scroll Of Taiwu/The Scroll of Taiwu_Data/Managed/UnityEngine.CoreModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.ImageConversionModule" Private="false">
+      <HintPath>/Users/shermer/Library/CloudStorage/OneDrive-个人/MakeMod/The Scroll Of Taiwu/The Scroll of Taiwu_Data/Managed/UnityEngine.ImageConversionModule.dll</HintPath>
     </Reference>
   </ItemGroup>
 </Project>

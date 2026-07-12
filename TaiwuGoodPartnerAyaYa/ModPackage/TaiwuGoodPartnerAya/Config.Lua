@@ -2,7 +2,7 @@ return {
     Title = "太吾好伙伴阿雅",
     Source = 0,
     FileId = 0,
-    Version = "0.1.17",
+    Version = "0.1.18",
     GameVersion = "1.0.52",
     BackendPlugins = {"TaiwuGoodPartnerAya.dll"},
     BackendPatches = {},

@@ -351,16 +351,23 @@ internal sealed class AyaService
             return;
         }
 
+        var dataContext = ResolveContext(context);
+        if (dataContext == null)
+        {
+            ModLogger.Warning("清理旧版 GearMate 同道状态失败：DataContext 尚未就绪。reason=" + reason);
+            return;
+        }
+
         try
         {
-            DomainManager.Extra.GearMateLeaveGroup(context, charId);
+            DomainManager.Extra.GearMateLeaveGroup(dataContext, charId);
         }
         catch (Exception ex)
         {
             ModLogger.Warning("清理旧版 GearMate 同道状态失败或无需清理。reason=" + reason + ", message=" + ex.Message);
         }
 
-        SetBool(context, LegacyGearMateCleanedKey, true);
+        SetBool(dataContext, LegacyGearMateCleanedKey, true);
     }
 
     public SerializableModData PurifyCharacter(DataContext context, SerializableModData data)
@@ -461,25 +468,31 @@ internal sealed class AyaService
             return MakeResult(false, "busy", "当前处于战斗、奇遇或月结流程中，暂不可准备卸载。", 0);
         }
 
+        var dataContext = ResolveContext(context);
+        if (dataContext == null)
+        {
+            return MakeResult(false, "contextUnavailable", "游戏数据上下文尚未就绪，暂不可准备卸载。", 0);
+        }
+
         if (TryResolveAya(data, out var charId, out var aya))
         {
             try
             {
-                DomainManager.Extra.GearMateLeaveGroup(context, charId);
+                DomainManager.Extra.GearMateLeaveGroup(dataContext, charId);
             }
             catch (Exception ex)
             {
                 ModLogger.Warning("准备卸载时尝试让阿雅离队失败：" + ex.Message);
             }
 
-            MoveAyaOutOfWorld(context, aya, "prepareUninstall");
+            MoveAyaOutOfWorld(dataContext, aya, "prepareUninstall");
         }
 
-        SetBool(context, AyaJoinedKey, false);
-        SetBool(context, AyaPlacedKey, false);
-        SetBool(context, AyaDismissedKey, true);
-        SetBool(context, AyaIntroTriggeredKey, true);
-        SetBool(context, UninstallPreparedKey, true);
+        SetBool(dataContext, AyaJoinedKey, false);
+        SetBool(dataContext, AyaPlacedKey, false);
+        SetBool(dataContext, AyaDismissedKey, true);
+        SetBool(dataContext, AyaIntroTriggeredKey, true);
+        SetBool(dataContext, UninstallPreparedKey, true);
 
         var result = MakeResult(true, "uninstallPrepared", "阿雅已经暂别。保存后可关闭或移除此 Mod；重新安装后也不会自动再次触发初遇。", 0);
         result.Set("uninstallPrepared", true);
@@ -1080,16 +1093,55 @@ internal sealed class AyaService
 
     private void SetInt(DataContext context, string key, int value)
     {
-        DomainManager.Mod.SetInt(context, _modIdStr, key, true, value);
+        var dataContext = ResolveContext(context);
+        if (dataContext == null)
+        {
+            ModLogger.Warning("写入阿雅整数状态失败：DataContext 尚未就绪。key=" + key);
+            return;
+        }
+
+        DomainManager.Mod.SetInt(dataContext, _modIdStr, key, true, value);
     }
 
     private void SetBool(DataContext context, string key, bool value)
     {
-        DomainManager.Mod.SetBool(context, _modIdStr, key, true, value);
+        var dataContext = ResolveContext(context);
+        if (dataContext == null)
+        {
+            ModLogger.Warning("写入阿雅布尔状态失败：DataContext 尚未就绪。key=" + key);
+            return;
+        }
+
+        DomainManager.Mod.SetBool(dataContext, _modIdStr, key, true, value);
+    }
+
+    private DataContext ResolveContext(DataContext context)
+    {
+        if (context != null)
+        {
+            return context;
+        }
+
+        try
+        {
+            return DomainManager.TaiwuEvent.MainThreadDataContext;
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Warning("获取主线程 DataContext 失败：" + ex.Message);
+            return null;
+        }
     }
 
     private void MoveAyaToTaiwu(DataContext context, Character aya)
     {
+        var dataContext = ResolveContext(context);
+        if (dataContext == null)
+        {
+            ModLogger.Warning("无法移动阿雅：DataContext 尚未就绪。");
+            return;
+        }
+
         var taiwu = DomainManager.Taiwu.GetTaiwu();
         if (taiwu == null)
         {
@@ -1110,8 +1162,8 @@ internal sealed class AyaService
             return;
         }
 
-        Events.RaiseFixedCharacterLocationChanged(context, aya.GetId(), from, location);
-        aya.SetLocation(location, context);
+        Events.RaiseFixedCharacterLocationChanged(dataContext, aya.GetId(), from, location);
+        aya.SetLocation(location, dataContext);
     }
 
     private void MoveAyaToTaiwuVillage(DataContext context, Character aya)
@@ -1128,14 +1180,21 @@ internal sealed class AyaService
 
     private void MoveAyaToTaiwuVillage(DataContext context, Character aya, Location location)
     {
+        var dataContext = ResolveContext(context);
+        if (dataContext == null)
+        {
+            ModLogger.Warning("无法移动阿雅到太吾村：DataContext 尚未就绪。");
+            return;
+        }
+
         var from = aya.GetLocation();
         if (from == location)
         {
             return;
         }
 
-        Events.RaiseFixedCharacterLocationChanged(context, aya.GetId(), from, location);
-        aya.SetLocation(location, context);
+        Events.RaiseFixedCharacterLocationChanged(dataContext, aya.GetId(), from, location);
+        aya.SetLocation(location, dataContext);
     }
 
     private void DismissAya(DataContext context)
@@ -1167,6 +1226,13 @@ internal sealed class AyaService
             return;
         }
 
+        var dataContext = ResolveContext(context);
+        if (dataContext == null)
+        {
+            ModLogger.Warning("无法移除阿雅地图位置：DataContext 尚未就绪。reason=" + reason);
+            return;
+        }
+
         var from = aya.GetLocation();
         if (from == Location.Invalid)
         {
@@ -1175,8 +1241,8 @@ internal sealed class AyaService
 
         try
         {
-            Events.RaiseFixedCharacterLocationChanged(context, aya.GetId(), from, Location.Invalid);
-            aya.SetLocation(Location.Invalid, context);
+            Events.RaiseFixedCharacterLocationChanged(dataContext, aya.GetId(), from, Location.Invalid);
+            aya.SetLocation(Location.Invalid, dataContext);
         }
         catch (Exception ex)
         {
