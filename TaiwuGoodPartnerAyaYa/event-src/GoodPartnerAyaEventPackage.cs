@@ -350,12 +350,6 @@ internal sealed class AyaInteractEvent : AyaEventBase
             },
             new TaiwuEventOption
             {
-                OptionKey = "prepare_uninstall",
-                OptionGuid = "ab0c12cf-3b77-4665-95fd-196e50d0aa02",
-                OnOptionSelect = OnPrepareUninstall
-            },
-            new TaiwuEventOption
-            {
                 OptionKey = "bye",
                 OptionGuid = "4d5346da-12a6-4c27-860e-31d5a5268879",
                 OnOptionSelect = () => string.Empty
@@ -412,9 +406,8 @@ internal sealed class AyaInteractEvent : AyaEventBase
     {
         var data = new SerializableModData();
         data.Set("charId", GetStatusAyaId());
-        TryCallNoRet(Taiwu_EventPackage_GoodPartnerAya.MethodPrefix + "Join", data);
-        ArgBox?.Set(Taiwu_EventPackage_GoodPartnerAya.ResultCodeKey, "join");
-        ArgBox?.Set(Taiwu_EventPackage_GoodPartnerAya.ResultMessageKey, "阿雅认真点头，背好小小行囊。往后太吾行至何处，她便随行至何处。");
+        TryCall(Taiwu_EventPackage_GoodPartnerAya.MethodPrefix + "Join", data, out var result);
+        SetResult(result);
         return Taiwu_EventPackage_GoodPartnerAya.ResultGuid;
     }
 
@@ -422,17 +415,7 @@ internal sealed class AyaInteractEvent : AyaEventBase
     {
         var data = new SerializableModData();
         data.Set("charId", GetStatusAyaId());
-        TryCallNoRet(Taiwu_EventPackage_GoodPartnerAya.MethodPrefix + "Leave", data);
-        ArgBox?.Set(Taiwu_EventPackage_GoodPartnerAya.ResultCodeKey, "leave");
-        ArgBox?.Set(Taiwu_EventPackage_GoodPartnerAya.ResultMessageKey, "阿雅暂且留在此处。若你再来寻她，她仍会帮你。");
-        return Taiwu_EventPackage_GoodPartnerAya.ResultGuid;
-    }
-
-    private string OnPrepareUninstall()
-    {
-        var data = new SerializableModData();
-        data.Set("charId", GetStatusAyaId());
-        TryCall(Taiwu_EventPackage_GoodPartnerAya.MethodPrefix + "PrepareUninstall", data, out var result);
+        TryCall(Taiwu_EventPackage_GoodPartnerAya.MethodPrefix + "Leave", data, out var result);
         SetResult(result);
         return Taiwu_EventPackage_GoodPartnerAya.ResultGuid;
     }

@@ -7,7 +7,10 @@
 | `workshop/WorkshopCover.jpg` | Steam 创意工坊封面 | 当前使用原截图搞怪版，约 184KB，已控制在 1MB 内。 |
 | `Assets/Images/ayaya-event-portrait-taiwu-style.png` | 太吾风格事件半身立绘 | 已由全身候选图扣透明底并裁成半身图，供事件/人物交互立绘接入。 |
 | `Assets/Images/ayaya-fullbody-transparent.png` | 太吾风格全身透明图 | 保留为后续封面、详情或前端裁切备用。 |
-| `CharacterAvatarData/TaiwuGoodPartnerAya/Aya.txt` | 游戏内人物头像数据 | 原生 AvatarData，用来固定人物页、左侧列表、地图头像的游戏内捏脸外观，避免继续随机生成普通 NPC 脸。 |
+| `CharacterAvatarData/TaiwuGoodPartnerAya/Aya.txt` | 游戏内 AvatarData | 原生捏脸数据，只影响拼装头像，不等同于 PNG 立绘资源。 |
+| `ModResources/Textures/NpcFace/BigFace/NpcFace_taiwu_good_partner_aya.png` | 固定人物大立绘 | 对应 `FixedAvatarName` 的 BigFace 资源，用于事件窗口和大头像。 |
+| `ModResources/Textures/NpcFace/NormalFace/NpcFace_taiwu_good_partner_aya.png` | 固定人物普通头像 | 对应人物详情等普通头像尺寸。 |
+| `ModResources/Textures/NpcFace/SmallFace/NpcFace_taiwu_good_partner_aya.png` | 固定人物小头像 | 对应地图左侧角色列表、日志等小头像尺寸。 |
 | `TempUnusedImages/` | 草稿和候选图片 | 只作备份，不进入正式 ModPackage。 |
 
 ## Steam 封面限制
@@ -30,15 +33,19 @@
 
 - 事件/人物交互立绘：`Assets/Images/ayaya-event-portrait-taiwu-style.png`
 - 创意工坊封面：`workshop/WorkshopCover.jpg`
-- 游戏内头像/人物页外观：`CharacterAvatarData/TaiwuGoodPartnerAya/Aya.txt`
-- 头像/侧边栏临时图：若前端允许直接读 PNG，可从 `ayaya-event-portrait-taiwu-style.png` 裁切；否则先使用 AvatarData 固定的原生头像。
+- 游戏内固定人物 PNG：`ModResources/Textures/NpcFace/*/NpcFace_taiwu_good_partner_aya.png`
+- 游戏内 AvatarData 兜底：`CharacterAvatarData/TaiwuGoodPartnerAya/Aya.txt`
 
 ## 2026-07-12 外观接入说明
 
-- 当前版本不再只依赖 `京畿女` 随机外观。角色模板已设置 `AvatarDataPath = "TaiwuGoodPartnerAya/Aya.txt"`。
+- 当前版本不再只依赖 `京畿女` 随机外观。角色模板已设置 `FixedAvatarName = "NpcFace_taiwu_good_partner_aya"`，同时保留 `AvatarDataPath = "TaiwuGoodPartnerAya/Aya.txt"` 作为兜底。
 - 后端插件启动时会把包内 `CharacterAvatarData/TaiwuGoodPartnerAya/Aya.txt` 复制到游戏可读取的 `StreamingAssets/CharacterAvatarData/TaiwuGoodPartnerAya/Aya.txt`，再创建或迁移阿雅外观。
 - 已经在旧版本中生成过的阿雅，会在下次 `EnsureAya`、交互注册或随行同步时尝试应用固定 AvatarData。
-- PNG 半身图已经扣透明底并放入包内，但是否能直接替换事件右侧大立绘，还取决于前端事件 UI 是否接受 Mod 包内 PNG 路径。若游戏仍显示 AvatarData 头像，下一步需要接前端资源/事件立绘加载层。
+- 前端固定人物 PNG 加载路径已确认：`CharacterAvatar` 会用 `FixedAvatarName` 拼出 `NpcFace/<BigFace|NormalFace|SmallFace>/<FixedAvatarName>`，再调用 `ResLoader.LoadModOrGameResource`。
+- `LoadModOrGameResource` 会优先从已加载 Mod 的 `ModResources/Textures` 中查询同名 path key；找不到才回退游戏内置 `RemakeResources/Textures`。
+- 因此 Mod 内应放置 `ModResources/Textures/NpcFace/BigFace/NpcFace_taiwu_good_partner_aya.png` 等三档文件，而不是只放在 `Assets/Images`。
+- `0.1.13` 起额外加入轻量前端插件 `TaiwuGoodPartnerAyaFrontend.dll`，启动时会把三档头像 key 主动注册进官方 `TextureCenter` 的 `ModTexture_<ModId>` 纹理组。它不做 UI 覆盖绘制，只补齐资源索引，避免前端回退到本体 `RemakeResources/Textures` 后报 `Failed to load resource`。
+- `0.1.14` 继续保留该资源注册插件，同时修正阿雅随行/回村交互的结果页逻辑。
 
 ## 动态立绘判断与后续
 

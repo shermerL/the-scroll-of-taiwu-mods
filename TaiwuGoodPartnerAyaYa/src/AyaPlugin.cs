@@ -9,7 +9,7 @@ using TaiwuModdingLib.Core.Plugin;
 
 namespace TaiwuGoodPartnerAya;
 
-[PluginConfig("TaiwuGoodPartnerAya", "Shermer", "0.1.9")]
+[PluginConfig("TaiwuGoodPartnerAya", "Shermer", "0.1.16")]
 public sealed class AyaPlugin : TaiwuRemakePlugin
 {
     private const string MethodPrefix = "TaiwuGoodPartnerAya.";
@@ -70,11 +70,11 @@ public sealed class AyaPlugin : TaiwuRemakePlugin
     {
         var pluginDirectory = Path.GetDirectoryName(typeof(AyaPlugin).Assembly.Location) ?? string.Empty;
         _config = AyaConfig.Load(pluginDirectory);
-            ModLogger.Initialize(pluginDirectory, _config.DiagnosticLogEnabled);
-            ModLogger.Diagnostic("Reload: config loaded. introEnabled=" + _config.IntroEnabled + ", cooldown=" + _config.PurifyCooldownMonths);
-            _service = new AyaService(ModIdStr, _config);
-            _service.EnsureAvatarDataInstalled(pluginDirectory);
-        }
+        ModLogger.Initialize(pluginDirectory, _config.DiagnosticLogEnabled);
+        ModLogger.Diagnostic("Reload: config loaded. introEnabled=" + _config.IntroEnabled + ", cooldown=" + _config.PurifyCooldownMonths);
+        _service = new AyaService(ModIdStr, _config);
+        _service.EnsureAvatarDataInstalled(pluginDirectory);
+    }
 
     private void RegisterAya(DataContext context, SerializableModData data)
     {
@@ -91,14 +91,14 @@ public sealed class AyaPlugin : TaiwuRemakePlugin
         return SafeInvoke(context, data, service => service.TriggerIntro(context, data));
     }
 
-    private void JoinAya(DataContext context, SerializableModData data)
+    private SerializableModData JoinAya(DataContext context, SerializableModData data)
     {
-        SafeInvoke(context, data, service => service.JoinAya(context, data));
+        return SafeInvoke(context, data, service => service.JoinAya(context, data));
     }
 
-    private void LeaveAya(DataContext context, SerializableModData data)
+    private SerializableModData LeaveAya(DataContext context, SerializableModData data)
     {
-        SafeInvoke(context, data, service => service.LeaveAya(context, data));
+        return SafeInvoke(context, data, service => service.LeaveAya(context, data));
     }
 
     private void OnTaiwuMove(DataContext context, MapBlockData fromBlock, MapBlockData toBlock, int actionPointCost)

@@ -27,7 +27,7 @@ return {
         Gender = 1,
         Race = 0,
         PresetBodyType = 0,
-        AvatarDataPath = "TaiwuGoodPartnerAya/Aya.txt",
+        FixedAvatarName = "NpcFace_taiwu_good_partner_aya",
         BaseAttraction = 900,
         Happiness = 50,
         Health = 100,

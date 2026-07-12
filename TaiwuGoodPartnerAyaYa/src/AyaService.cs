@@ -35,6 +35,7 @@ internal sealed class AyaService
 
     private readonly string _modIdStr;
     private readonly AyaConfig _config;
+    private string _pluginDirectory = string.Empty;
 
     public AyaService(string modIdStr, AyaConfig config)
     {
@@ -44,6 +45,8 @@ internal sealed class AyaService
 
     public void EnsureAvatarDataInstalled(string pluginDirectory)
     {
+        _pluginDirectory = pluginDirectory ?? string.Empty;
+
         try
         {
             var relativePath = NormalizeAvatarDataPath(_config.AssetPaths?.AvatarData);
@@ -255,23 +258,28 @@ internal sealed class AyaService
         SetBool(context, AyaIntroTriggeredKey, true);
     }
 
-    public void JoinAya(DataContext context, SerializableModData data)
+    public SerializableModData JoinAya(DataContext context, SerializableModData data)
     {
         if (GetBool(UninstallPreparedKey, false))
         {
             ModLogger.Warning("阿雅已准备卸载，忽略 JoinAya。");
-            return;
+            return MakeResult(false, "uninstallPrepared", "阿雅已经暂别，不能再随行。", 0);
         }
 
         if (GetBool(AyaDismissedKey, false))
         {
             ModLogger.Warning("阿雅已经离去，忽略 JoinAya。");
-            return;
+            return MakeResult(false, "dismissed", "阿雅已经离去，不能再随行。", 0);
+        }
+
+        if (GetBool(AyaJoinedKey, false))
+        {
+            return MakeResult(true, "alreadyJoined", "阿雅已经在与你同行。", 0);
         }
 
         if (!TryResolveAya(data, out var charId, out var aya))
         {
-            return;
+            return MakeResult(false, "missingAya", "没有找到阿雅，暂时不能同行。", 0);
         }
 
         MoveAyaToTaiwu(context, aya);
@@ -279,17 +287,42 @@ internal sealed class AyaService
         SetBool(context, AyaJoinedKey, true);
         SetBool(context, AyaIntroTriggeredKey, true);
         SetBool(context, AyaPlacedKey, true);
+        return MakeResult(true, "joined", "阿雅认真点头，背好小小行囊。往后太吾行至何处，她便随行至何处。", 0);
     }
 
-    public void LeaveAya(DataContext context, SerializableModData data)
+    public SerializableModData LeaveAya(DataContext context, SerializableModData data)
     {
-        if (!TryResolveAya(data, out var charId, out _))
+        if (GetBool(UninstallPreparedKey, false))
         {
-            return;
+            return MakeResult(false, "uninstallPrepared", "阿雅已经暂别，不必再安排她回村。", 0);
+        }
+
+        if (GetBool(AyaDismissedKey, false))
+        {
+            return MakeResult(false, "dismissed", "阿雅已经离去，不在此处。", 0);
+        }
+
+        if (!GetBool(AyaJoinedKey, false))
+        {
+            return MakeResult(false, "notJoined", "阿雅此时没有随行，不必让她回太吾村。", 0);
+        }
+
+        if (!TryResolveAya(data, out var charId, out var aya))
+        {
+            return MakeResult(false, "missingAya", "没有找到阿雅，暂时不能安排她回村。", 0);
+        }
+
+        var taiwuVillageLocation = DomainManager.Taiwu.GetTaiwuVillageLocation();
+        if (!taiwuVillageLocation.IsValid())
+        {
+            return MakeResult(false, "noTaiwuVillage", "太吾村尚未安定下来，阿雅暂时不知道该回何处。", 0);
         }
 
         TryCleanLegacyGearMate(context, charId, "leave");
+        MoveAyaToTaiwuVillage(context, aya, taiwuVillageLocation);
         SetBool(context, AyaJoinedKey, false);
+        SetBool(context, AyaPlacedKey, true);
+        return MakeResult(true, "leftToVillage", "阿雅点点头，收好药囊，先回太吾村等候。若你再到村中寻她，她仍会帮你。", 0);
     }
 
     public void SyncFollowerToTaiwu(DataContext context, string reason)
@@ -428,7 +461,7 @@ internal sealed class AyaService
             return MakeResult(false, "busy", "当前处于战斗、奇遇或月结流程中，暂不可准备卸载。", 0);
         }
 
-        if (TryResolveAya(data, out var charId, out _))
+        if (TryResolveAya(data, out var charId, out var aya))
         {
             try
             {
@@ -438,9 +471,13 @@ internal sealed class AyaService
             {
                 ModLogger.Warning("准备卸载时尝试让阿雅离队失败：" + ex.Message);
             }
+
+            MoveAyaOutOfWorld(context, aya, "prepareUninstall");
         }
 
         SetBool(context, AyaJoinedKey, false);
+        SetBool(context, AyaPlacedKey, false);
+        SetBool(context, AyaDismissedKey, true);
         SetBool(context, AyaIntroTriggeredKey, true);
         SetBool(context, UninstallPreparedKey, true);
 
@@ -451,6 +488,13 @@ internal sealed class AyaService
 
     public SerializableModData GetStatus(DataContext context)
     {
+        if (GetBool(AyaJoinedKey, false)
+            && !GetBool(UninstallPreparedKey, false)
+            && !GetBool(AyaDismissedKey, false))
+        {
+            SyncFollowerToTaiwu(context, "getStatus");
+        }
+
         var ayaCharId = GetInt(AyaCharacterIdKey, -1);
         var ayaExists = ayaCharId > 0 && DomainManager.Character.TryGetElement_Objects(ayaCharId, out var aya) && IsAyaFixedTemplate(aya);
         var uninstallPrepared = GetBool(UninstallPreparedKey, false);
@@ -653,8 +697,12 @@ internal sealed class AyaService
             var avatarData = AvatarDataLoader.Load(relativePath);
             if (avatarData == null)
             {
-                ModLogger.Warning("阿雅 AvatarData 读取失败：" + relativePath);
-                return;
+                avatarData = LoadAvatarDataFromModPackage(relativePath);
+                if (avatarData == null)
+                {
+                    ModLogger.Warning("阿雅 AvatarData 读取失败：" + relativePath);
+                    return;
+                }
             }
 
             var copy = new AvatarData(avatarData);
@@ -689,6 +737,92 @@ internal sealed class AyaService
         };
 
         return candidates.FirstOrDefault(File.Exists);
+    }
+
+    private AvatarData LoadAvatarDataFromModPackage(string relativePath)
+    {
+        try
+        {
+            var sourcePath = FindAvatarDataSource(_pluginDirectory, relativePath);
+            if (string.IsNullOrWhiteSpace(sourcePath))
+            {
+                return null;
+            }
+
+            var avatarData = new AvatarData();
+            var fields = typeof(AvatarData).GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                .Where(field => field.GetCustomAttribute<NonSerializedAttribute>() == null)
+                .ToDictionary(field => field.Name, field => field);
+
+            foreach (var rawLine in File.ReadAllLines(sourcePath))
+            {
+                var line = rawLine.Trim();
+                if (line.Length == 0 || line.StartsWith("--", StringComparison.Ordinal) || line == "return" || line == "{" || line == "}")
+                {
+                    continue;
+                }
+
+                var equalsIndex = line.IndexOf('=');
+                if (equalsIndex <= 0)
+                {
+                    continue;
+                }
+
+                var key = line.Substring(0, equalsIndex).Trim();
+                var valueText = line.Substring(equalsIndex + 1).Trim().TrimEnd(',').Trim();
+                if (!fields.TryGetValue(key, out var field))
+                {
+                    continue;
+                }
+
+                SetAvatarFieldValue(avatarData, field, valueText);
+            }
+
+            return avatarData;
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Warning("从 Mod 包解析阿雅 AvatarData 失败：" + ex.Message);
+            return null;
+        }
+    }
+
+    private static void SetAvatarFieldValue(AvatarData avatarData, FieldInfo field, string valueText)
+    {
+        try
+        {
+            if (field.FieldType == typeof(bool))
+            {
+                field.SetValue(avatarData, valueText.Equals("true", StringComparison.OrdinalIgnoreCase));
+                return;
+            }
+
+            if (!double.TryParse(valueText, out var number))
+            {
+                return;
+            }
+
+            if (field.FieldType == typeof(byte))
+            {
+                field.SetValue(avatarData, (byte)number);
+            }
+            else if (field.FieldType == typeof(sbyte))
+            {
+                field.SetValue(avatarData, (sbyte)number);
+            }
+            else if (field.FieldType == typeof(short))
+            {
+                field.SetValue(avatarData, (short)number);
+            }
+            else if (field.FieldType == typeof(ushort))
+            {
+                field.SetValue(avatarData, (ushort)number);
+            }
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Warning("设置阿雅 AvatarData 字段失败：" + field.Name + ", " + ex.Message);
+        }
     }
 
     private static string GetGameDataPath(string pluginDirectory)
@@ -980,6 +1114,30 @@ internal sealed class AyaService
         aya.SetLocation(location, context);
     }
 
+    private void MoveAyaToTaiwuVillage(DataContext context, Character aya)
+    {
+        var location = DomainManager.Taiwu.GetTaiwuVillageLocation();
+        if (!location.IsValid())
+        {
+            ModLogger.Warning("无法移动阿雅：太吾村位置无效。");
+            return;
+        }
+
+        MoveAyaToTaiwuVillage(context, aya, location);
+    }
+
+    private void MoveAyaToTaiwuVillage(DataContext context, Character aya, Location location)
+    {
+        var from = aya.GetLocation();
+        if (from == location)
+        {
+            return;
+        }
+
+        Events.RaiseFixedCharacterLocationChanged(context, aya.GetId(), from, location);
+        aya.SetLocation(location, context);
+    }
+
     private void DismissAya(DataContext context)
     {
         if (TryResolveAya(null, out var charId, out var aya))
@@ -993,17 +1151,36 @@ internal sealed class AyaService
                 ModLogger.Warning("阿雅离去时尝试离队失败：" + ex.Message);
             }
 
-            var from = aya.GetLocation();
-            if (from != Location.Invalid)
-            {
-                Events.RaiseFixedCharacterLocationChanged(context, aya.GetId(), from, Location.Invalid);
-                aya.SetLocation(Location.Invalid, context);
-            }
+            MoveAyaOutOfWorld(context, aya, "dismiss");
         }
 
         SetBool(context, AyaJoinedKey, false);
         SetBool(context, AyaPlacedKey, false);
         SetBool(context, AyaDismissedKey, true);
         SetBool(context, AyaIntroTriggeredKey, true);
+    }
+
+    private void MoveAyaOutOfWorld(DataContext context, Character aya, string reason)
+    {
+        if (aya == null)
+        {
+            return;
+        }
+
+        var from = aya.GetLocation();
+        if (from == Location.Invalid)
+        {
+            return;
+        }
+
+        try
+        {
+            Events.RaiseFixedCharacterLocationChanged(context, aya.GetId(), from, Location.Invalid);
+            aya.SetLocation(Location.Invalid, context);
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Warning("移除阿雅地图位置失败。reason=" + reason + ", message=" + ex.Message);
+        }
     }
 }
