@@ -1,0 +1,3 @@
+# displayName|modTitle|backendPlugin|methodPrefix|description
+# 角色 Mod 需要暴露 methodPrefix + GetStatus 和 methodPrefix + PrepareUninstall。
+阿雅|太吾好伙伴阿雅|TaiwuGoodPartnerAya.dll|TaiwuGoodPartnerAya.|净化玄灰的特殊伙伴。准备卸载会让阿雅退出随行并从地图位置移除。

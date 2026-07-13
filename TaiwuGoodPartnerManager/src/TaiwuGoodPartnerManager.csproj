@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>12.0</LangVersion>
+    <AssemblyName>TaiwuGoodPartnerManager</AssemblyName>
+    <RootNamespace></RootNamespace>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="Assembly-CSharp" Private="false">
+      <HintPath>/Users/shermer/Library/CloudStorage/OneDrive-个人/MakeMod/The Scroll Of Taiwu/The Scroll of Taiwu_Data/Managed/Assembly-CSharp.dll</HintPath>
+    </Reference>
+    <Reference Include="GameData.Shared" Private="false">
+      <HintPath>/Users/shermer/Library/CloudStorage/OneDrive-个人/MakeMod/The Scroll Of Taiwu/The Scroll of Taiwu_Data/Managed/GameData.Shared.dll</HintPath>
+    </Reference>
+    <Reference Include="GameData.Utilities" Private="false">
+      <HintPath>/Users/shermer/Library/CloudStorage/OneDrive-个人/MakeMod/The Scroll Of Taiwu/The Scroll of Taiwu_Data/Managed/GameData.Utilities.dll</HintPath>
+    </Reference>
+    <Reference Include="GameData.Utilities.Structure" Private="false">
+      <HintPath>/Users/shermer/Library/CloudStorage/OneDrive-个人/MakeMod/The Scroll Of Taiwu/The Scroll of Taiwu_Data/Managed/GameData.Utilities.Structure.dll</HintPath>
+    </Reference>
+    <Reference Include="TaiwuModdingLib" Private="false">
+      <HintPath>/Users/shermer/Library/CloudStorage/OneDrive-个人/MakeMod/The Scroll Of Taiwu/The Scroll of Taiwu_Data/Managed/TaiwuModdingLib.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine" Private="false">
+      <HintPath>/Users/shermer/Library/CloudStorage/OneDrive-个人/MakeMod/The Scroll Of Taiwu/The Scroll of Taiwu_Data/Managed/UnityEngine.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule" Private="false">
+      <HintPath>/Users/shermer/Library/CloudStorage/OneDrive-个人/MakeMod/The Scroll Of Taiwu/The Scroll of Taiwu_Data/Managed/UnityEngine.CoreModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.IMGUIModule" Private="false">
+      <HintPath>/Users/shermer/Library/CloudStorage/OneDrive-个人/MakeMod/The Scroll Of Taiwu/The Scroll of Taiwu_Data/Managed/UnityEngine.IMGUIModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.InputLegacyModule" Private="false">
+      <HintPath>/Users/shermer/Library/CloudStorage/OneDrive-个人/MakeMod/The Scroll Of Taiwu/The Scroll of Taiwu_Data/Managed/UnityEngine.InputLegacyModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.TextRenderingModule" Private="false">
+      <HintPath>/Users/shermer/Library/CloudStorage/OneDrive-个人/MakeMod/The Scroll Of Taiwu/The Scroll of Taiwu_Data/Managed/UnityEngine.TextRenderingModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.UI" Private="false">
+      <HintPath>/Users/shermer/Library/CloudStorage/OneDrive-个人/MakeMod/The Scroll Of Taiwu/The Scroll of Taiwu_Data/Managed/UnityEngine.UI.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.UIModule" Private="false">
+      <HintPath>/Users/shermer/Library/CloudStorage/OneDrive-个人/MakeMod/The Scroll Of Taiwu/The Scroll of Taiwu_Data/Managed/UnityEngine.UIModule.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+</Project>
