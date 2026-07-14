@@ -5,7 +5,7 @@
 ## 功能
 
 - 默认 `Home` 呼出/隐藏界面
-- 支持在界面内修改热键，并写入 `TaiwuJiaJiaJia.settings.ini`
+- 支持在界面内修改热键，并持久化写入游戏用户数据目录下的 `TaiwuJiaJiaJia/TaiwuJiaJiaJia.settings.ini`
 - 按分类、品级、名称筛选物品
 - 物品网格显示图标和品级颜色
 - 右侧详情面板显示物品信息

@@ -27,6 +27,7 @@ public sealed class ItemAdderWindow : MonoBehaviour
     };
 
     private const string SettingsFileName = "TaiwuJiaJiaJia.settings.ini";
+    private const string SettingsDirectoryName = "TaiwuJiaJiaJia";
     private const string CacheFileName = "ItemCache.tsv";
     private const string CacheHeader = "TaiwuItemAdderFrontend.ItemCache.v3";
     private const int QuantityStep = 10;
@@ -1019,6 +1020,21 @@ public sealed class ItemAdderWindow : MonoBehaviour
 
     private static string GetSettingsPath()
     {
+        try
+        {
+            string persistentDataPath = Application.persistentDataPath;
+            return string.IsNullOrWhiteSpace(persistentDataPath)
+                ? null
+                : Path.Combine(persistentDataPath, SettingsDirectoryName, SettingsFileName);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string GetLegacySettingsPath()
+    {
         string modRoot = GetModRoot();
         return string.IsNullOrEmpty(modRoot) ? null : Path.Combine(modRoot, SettingsFileName);
     }
@@ -1308,6 +1324,7 @@ public sealed class ItemAdderWindow : MonoBehaviour
             string path = GetSettingsPath();
             if (string.IsNullOrEmpty(path))
             {
+                ModLogger.Warn("无法取得持久化设置目录，将使用默认热键。");
                 return settings;
             }
 
@@ -1315,39 +1332,17 @@ public sealed class ItemAdderWindow : MonoBehaviour
             {
                 if (!File.Exists(path))
                 {
+                    string legacyPath = GetLegacySettingsPath();
+                    if (!string.IsNullOrEmpty(legacyPath) && File.Exists(legacyPath))
+                    {
+                        ReadFromFile(settings, legacyPath);
+                    }
+
                     settings.Save();
                     return settings;
                 }
 
-                string[] lines = File.ReadAllLines(path);
-                foreach (string rawLine in lines)
-                {
-                    string line = rawLine.Trim();
-                    if (line.Length == 0 || line.StartsWith("#", StringComparison.Ordinal))
-                    {
-                        continue;
-                    }
-
-                    int separator = line.IndexOf('=');
-                    if (separator <= 0)
-                    {
-                        continue;
-                    }
-
-                    string key = line.Substring(0, separator).Trim();
-                    string value = line.Substring(separator + 1).Trim();
-                    if (key.Equals("ToggleKey", StringComparison.OrdinalIgnoreCase))
-                    {
-                        if (Enum.TryParse(value, ignoreCase: true, out KeyCode parsed) && parsed != KeyCode.None)
-                        {
-                            settings.ToggleKey = parsed;
-                        }
-                        else
-                        {
-                            ModLogger.Warn($"配置文件中的 ToggleKey 无效，将使用默认热键。value={value}");
-                        }
-                    }
-                }
+                ReadFromFile(settings, path);
             }
             catch (Exception ex)
             {
@@ -1362,8 +1357,16 @@ public sealed class ItemAdderWindow : MonoBehaviour
             string path = GetSettingsPath();
             if (string.IsNullOrEmpty(path))
             {
-                return;
+                throw new InvalidOperationException("无法取得持久化设置目录。");
             }
+
+            string directory = Path.GetDirectoryName(path);
+            if (string.IsNullOrEmpty(directory))
+            {
+                throw new InvalidOperationException("持久化设置目录无效。");
+            }
+
+            Directory.CreateDirectory(directory);
 
             string[] lines =
             {
@@ -1373,6 +1376,41 @@ public sealed class ItemAdderWindow : MonoBehaviour
                 $"ToggleKey={ToggleKey}"
             };
             File.WriteAllLines(path, lines);
+        }
+
+        private static void ReadFromFile(ModSettings settings, string path)
+        {
+            string[] lines = File.ReadAllLines(path);
+            foreach (string rawLine in lines)
+            {
+                string line = rawLine.Trim();
+                if (line.Length == 0 || line.StartsWith("#", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                int separator = line.IndexOf('=');
+                if (separator <= 0)
+                {
+                    continue;
+                }
+
+                string key = line.Substring(0, separator).Trim();
+                string value = line.Substring(separator + 1).Trim();
+                if (!key.Equals("ToggleKey", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (Enum.TryParse(value, ignoreCase: true, out KeyCode parsed) && parsed != KeyCode.None)
+                {
+                    settings.ToggleKey = parsed;
+                }
+                else
+                {
+                    ModLogger.Warn($"配置文件中的 ToggleKey 无效，将使用默认热键。value={value}");
+                }
+            }
         }
     }
 }
