@@ -26,10 +26,19 @@ public sealed class ItemAdderWindow : MonoBehaviour
         "#8f8f8f", "#dadada", "#6fb96f", "#5ea9dc", "#b083e6", "#d89a46", "#e1c35b", "#f08b8b", "#ff5f5f"
     };
 
+    private static readonly string[] SafetyFilterNames =
+    {
+        "可加", "确认", "锁定"
+    };
+
     private const string SettingsFileName = "TaiwuJiaJiaJia.settings.ini";
     private const string SettingsDirectoryName = "TaiwuJiaJiaJia";
     private const string CacheFileName = "ItemCache.tsv";
-    private const string CacheHeader = "TaiwuItemAdderFrontend.ItemCache.v3";
+    private const string CacheHeader = "TaiwuItemAdderFrontend.ItemCache.v4";
+    private const string CacheRuleVersion = "safety-v1";
+    private const string CacheMvidPrefix = "MVID\t";
+    private const string CacheRulePrefix = "RULE\t";
+    private const string CacheCountPrefix = "COUNT\t";
     private const int QuantityStep = 10;
     private const float CardHeight = 144f;
     private const float CardMinWidth = 150f;
@@ -54,15 +63,20 @@ public sealed class ItemAdderWindow : MonoBehaviour
     private Vector2 _dragOffset;
     private KeyCode _toggleKey = KeyCode.Home;
     private bool _visible;
-    private bool _showBlocked;
     private bool _captureHotkey;
     private bool _draggingWindow;
+    private bool _searchFocused;
     private int _selectedType = -1;
     private int _selectedGrade = -1;
+    private int _selectedSafety = -1;
     private ItemEntry _selectedItem;
+    private ItemEntry _pendingRiskItem;
     private string _search = string.Empty;
     private string _amountText = "10";
-    private string _status = "Home 呼出/隐藏。默认过滤剧情、任务、特殊物品。";
+    private string _status = "Home 呼出/隐藏。物品按安全状态分级，剧情锁定物品不可添加。";
+    private int _normalCount;
+    private int _cautionCount;
+    private int _lockedCount;
     private double _lastRefreshTime;
     private GUIStyle _rowStyle;
     private GUIStyle _rowAltStyle;
@@ -81,12 +95,14 @@ public sealed class ItemAdderWindow : MonoBehaviour
     private GUIStyle _detailTitleStyle;
     private GUIStyle _detailLabelStyle;
     private GUIStyle _warningBadgeStyle;
+    private GUIStyle _lockedBadgeStyle;
+    private GUIStyle _modalStyle;
 
     private void Awake()
     {
         _settings = ModSettings.Load();
         _toggleKey = _settings.ToggleKey;
-        _status = $"当前呼出/隐藏热键：{_toggleKey}。默认过滤剧情、任务、特殊物品。";
+        _status = $"当前呼出/隐藏热键：{_toggleKey}。剧情锁定物品不可添加。";
         CreateInputBlocker();
         LoadInitialCache();
     }
@@ -102,10 +118,32 @@ public sealed class ItemAdderWindow : MonoBehaviour
 
     private void Update()
     {
-        if (Input.GetKeyDown(_toggleKey))
+        bool searchConsumesToggle = _visible && _searchFocused && IsSearchTypingKey(_toggleKey);
+        if (!_captureHotkey && !searchConsumesToggle && Input.GetKeyDown(_toggleKey))
         {
             ToggleWindow();
         }
+    }
+
+    private static bool IsSearchTypingKey(KeyCode key)
+    {
+        return (key >= KeyCode.A && key <= KeyCode.Z) ||
+               (key >= KeyCode.Alpha0 && key <= KeyCode.Alpha9) ||
+               (key >= KeyCode.Keypad0 && key <= KeyCode.Keypad9) ||
+               key == KeyCode.Space ||
+               key == KeyCode.Backspace ||
+               key == KeyCode.Delete ||
+               key == KeyCode.Minus ||
+               key == KeyCode.Equals ||
+               key == KeyCode.LeftBracket ||
+               key == KeyCode.RightBracket ||
+               key == KeyCode.Semicolon ||
+               key == KeyCode.Quote ||
+               key == KeyCode.Comma ||
+               key == KeyCode.Period ||
+               key == KeyCode.Slash ||
+               key == KeyCode.Backslash ||
+               key == KeyCode.BackQuote;
     }
 
     private void OnGUI()
@@ -135,6 +173,8 @@ public sealed class ItemAdderWindow : MonoBehaviour
         else
         {
             _captureHotkey = false;
+            _searchFocused = false;
+            _pendingRiskItem = null;
         }
 
         SetInputBlockerVisible(_visible);
@@ -190,7 +230,13 @@ public sealed class ItemAdderWindow : MonoBehaviour
 
     private void DrawWindow(int id)
     {
-        HandleWindowDrag();
+        bool modalOpen = _pendingRiskItem != null;
+        if (!modalOpen)
+        {
+            HandleWindowDrag();
+        }
+
+        GUI.enabled = !modalOpen;
         Rect content = new Rect(16f, 28f, _windowRect.width - 32f, _windowRect.height - 44f);
         GUI.Box(new Rect(8f, 24f, _windowRect.width - 16f, _windowRect.height - 32f), GUIContent.none, _listBoxStyle);
         float leftWidth = content.width - DetailPanelWidth - MainDetailGap;
@@ -206,42 +252,65 @@ public sealed class ItemAdderWindow : MonoBehaviour
         y += 32f;
 
         GUI.Label(new Rect(content.x, y + 2f, 50f, 24f), "搜索");
-        Rect searchRect = new Rect(content.x + 54f, y, leftWidth - 54f, 28f);
+        Rect searchRect = new Rect(content.x + 54f, y, leftWidth - 176f, 28f);
         GUI.SetNextControlName("TaiwuJiaJiaJia.Search");
-        string nextSearch = GUI.TextField(searchRect, _search ?? string.Empty, _textFieldStyle);
-        if (string.IsNullOrEmpty(_search) && GUI.GetNameOfFocusedControl() != "TaiwuJiaJiaJia.Search")
+        string nextSearch = GUI.TextField(searchRect, _search ?? string.Empty, 64, _textFieldStyle);
+        _searchFocused = GUI.GetNameOfFocusedControl() == "TaiwuJiaJiaJia.Search";
+        if (string.IsNullOrEmpty(_search) && !_searchFocused)
         {
-            GUI.Label(new Rect(searchRect.x + 10f, searchRect.y + 4f, searchRect.width - 20f, 22f), "名称或ID", _mutedStyle);
+            GUI.Label(new Rect(searchRect.x + 10f, searchRect.y + 4f, searchRect.width - 20f, 22f), "输入物品名称或模板 ID", _mutedStyle);
         }
         if (nextSearch != _search)
         {
             _search = nextSearch;
+            _selectedItem = null;
+            _scroll = Vector2.zero;
             RebuildFiltered();
         }
 
-        bool nextShowBlocked = GUI.Toggle(new Rect(detailX, y + 2f, 178f, 26f), _showBlocked, "显示任务/特殊物品");
-        if (nextShowBlocked != _showBlocked)
+        if (GUI.Button(new Rect(searchRect.xMax + 6f, y, 56f, 28f), "搜索", _secondaryButtonStyle))
         {
-            _showBlocked = nextShowBlocked;
+            GUI.FocusControl("TaiwuJiaJiaJia.Search");
+            _scroll = Vector2.zero;
             RebuildFiltered();
         }
 
-        if (GUI.Button(new Rect(detailX + DetailPanelWidth - 72f, y, 72f, 28f), "刷新", _secondaryButtonStyle))
+        GUI.enabled = !modalOpen && !string.IsNullOrEmpty(_search);
+        if (GUI.Button(new Rect(searchRect.xMax + 66f, y, 56f, 28f), "清空", _secondaryButtonStyle))
+        {
+            _search = string.Empty;
+            _selectedItem = null;
+            _scroll = Vector2.zero;
+            GUI.FocusControl("TaiwuJiaJiaJia.Search");
+            RebuildFiltered();
+        }
+        GUI.enabled = !modalOpen;
+
+        DrawSafetyButtons(new Rect(detailX, y, DetailPanelWidth - 68f, 28f));
+        if (GUI.Button(new Rect(detailX + DetailPanelWidth - 64f, y, 64f, 28f), "刷新", _secondaryButtonStyle))
         {
             RefreshItemsIfNeeded(force: true);
         }
         y += 36f;
 
         float listTopY = y;
-        GUI.Label(new Rect(content.x, y, 240f, 22f), $"物品列表：{_filtered.Count} / {_items.Count}");
-        GUI.Label(new Rect(content.x + 250f, y, leftWidth - 250f, 22f), GetSelectedText(), _mutedStyle);
+        GUI.Label(new Rect(content.x, y, 430f, 22f),
+            $"物品：{_filtered.Count}/{_items.Count}  可加 {_normalCount}  确认 {_cautionCount}  锁定 {_lockedCount}");
+        GUI.Label(new Rect(content.x + 438f, y, leftWidth - 438f, 22f), GetSelectedText(), _mutedStyle);
         y += 24f;
 
         DrawVirtualGrid(new Rect(content.x, y, leftWidth, GridHeight));
         DrawDetailPanel(new Rect(detailX, listTopY, DetailPanelWidth, GridHeight + 68f));
         y += GridHeight + 10f;
 
+        bool riskSelection = _selectedItem != null && _selectedItem.Safety == ItemSafetyLevel.Caution;
+        if (riskSelection && _amountText != "1")
+        {
+            _amountText = "1";
+        }
+
         GUI.Label(new Rect(content.x, y, 42f, 24f), "数量");
+        GUI.enabled = !modalOpen && !riskSelection;
         if (GUI.Button(new Rect(content.x + 46f, y, 34f, 26f), "<", _secondaryButtonStyle))
         {
             StepAmount(-QuantityStep);
@@ -252,12 +321,13 @@ public sealed class ItemAdderWindow : MonoBehaviour
             StepAmount(QuantityStep);
         }
 
-        GUI.enabled = _selectedItem != null && !_selectedItem.Blocked;
-        if (GUI.Button(new Rect(content.x + 214f, y, 220f, 26f), "添加选中物品", _primaryButtonStyle))
+        GUI.enabled = !modalOpen && _selectedItem != null && _selectedItem.Safety != ItemSafetyLevel.Locked;
+        string addButtonText = riskSelection ? "风险添加（仅 1 个）" : "添加选中物品";
+        if (GUI.Button(new Rect(content.x + 214f, y, 220f, 26f), addButtonText, _primaryButtonStyle))
         {
             AddSelected();
         }
-        GUI.enabled = true;
+        GUI.enabled = !modalOpen;
 
         Rect hotkeyLabelRect = new Rect(content.x + leftWidth - 264f, y, 144f, 26f);
         GUI.Label(hotkeyLabelRect, $"当前热键：{_toggleKey}", _mutedStyle);
@@ -270,6 +340,12 @@ public sealed class ItemAdderWindow : MonoBehaviour
         y += 34f;
 
         GUI.Label(new Rect(content.x, y, leftWidth, 44f), _status, _mutedStyle);
+
+        GUI.enabled = true;
+        if (modalOpen)
+        {
+            DrawRiskConfirmation(content);
+        }
     }
 
     private void HandleWindowDrag()
@@ -330,6 +406,24 @@ public sealed class ItemAdderWindow : MonoBehaviour
         }, includeAll: true);
     }
 
+    private void DrawSafetyButtons(Rect area)
+    {
+        int count = SafetyFilterNames.Length + 1;
+        float width = area.width / count;
+        for (int i = 0; i < count; i++)
+        {
+            int value = i - 1;
+            string label = value < 0 ? "全部" : SafetyFilterNames[value];
+            Rect rect = new Rect(area.x + i * width, area.y, width - 3f, area.height);
+            if (GUI.Button(rect, label, _selectedSafety == value ? _tabSelectedStyle : _tabStyle))
+            {
+                _selectedSafety = value;
+                _selectedItem = null;
+                RebuildFiltered();
+            }
+        }
+    }
+
     private void DrawButtonGrid(Rect area, string[] labels, int selected, int columns, float width, float height, Action<int> onSelect, bool includeAll)
     {
         int offset = includeAll ? 1 : 0;
@@ -377,7 +471,12 @@ public sealed class ItemAdderWindow : MonoBehaviour
             if (GUI.Button(card, GUIContent.none, style))
             {
                 _selectedItem = item;
-                _status = item.Blocked ? $"已选中但不可添加：{item.BlockReason}" : $"已选中：{item.Name}";
+                _status = item.Safety switch
+                {
+                    ItemSafetyLevel.Locked => $"已选中但不可添加：{item.SafetyReason}",
+                    ItemSafetyLevel.Caution => $"已选中风险物品：{item.Name}，添加前会再次确认。",
+                    _ => $"已选中：{item.Name}"
+                };
             }
             DrawItemCardContent(card, item);
         }
@@ -398,12 +497,15 @@ public sealed class ItemAdderWindow : MonoBehaviour
         Rect metaRect = new Rect(card.x + 8f, card.y + 108f, card.width - 16f, 18f);
         GUI.Label(metaRect, $"{item.TypeName} / {grade}", _cardMetaStyle);
 
-        if (item.Blocked)
+        if (item.Safety != ItemSafetyLevel.Normal)
         {
             Rect warningRect = new Rect(card.x + card.width - 30f, card.y + 8f, 22f, 22f);
-            GUI.Label(warningRect, "!", _warningBadgeStyle);
+            GUI.Label(warningRect, item.Safety == ItemSafetyLevel.Locked ? "锁" : "!",
+                item.Safety == ItemSafetyLevel.Locked ? _lockedBadgeStyle : _warningBadgeStyle);
             Rect blockedRect = new Rect(card.x + 8f, card.y + 124f, card.width - 16f, 16f);
-            GUI.Label(blockedRect, $"<color=#f2c15b>不可添加：{item.BlockReason}</color>", _cardMetaStyle);
+            string stateColor = item.Safety == ItemSafetyLevel.Locked ? "#ff8174" : "#f2c15b";
+            string stateText = item.Safety == ItemSafetyLevel.Locked ? "剧情锁定" : "需确认";
+            GUI.Label(blockedRect, $"<color={stateColor}>{stateText}：{item.SafetyReason}</color>", _cardMetaStyle);
         }
     }
 
@@ -484,14 +586,19 @@ public sealed class ItemAdderWindow : MonoBehaviour
         GUI.Label(new Rect(0f, y, view.width, 28f), $"<color={color}>{item.Name}</color>", _detailTitleStyle);
         y += 34f;
 
-        if (item.Blocked)
+        if (item.Safety != ItemSafetyLevel.Normal)
         {
-            GUI.Label(new Rect(0f, y, view.width, 42f), $"! 不允许添加：{item.BlockReason}", _warningBadgeStyle);
+            bool locked = item.Safety == ItemSafetyLevel.Locked;
+            string message = locked
+                ? $"锁 剧情锁定：{item.SafetyReason}"
+                : $"! 添加前需确认：{item.SafetyReason}";
+            GUI.Label(new Rect(0f, y, view.width, 42f), message, locked ? _lockedBadgeStyle : _warningBadgeStyle);
             y += 48f;
         }
 
         DrawDetailLine(ref y, "分类", item.TypeName);
         DrawDetailLine(ref y, "品级", GetGradeName(item.Grade));
+        DrawDetailLine(ref y, "安全等级", GetSafetyDisplayName(item.Safety));
         DrawDetailLine(ref y, "模板ID", item.TemplateId.ToString());
         DrawDetailLine(ref y, "类型ID", item.ItemType.ToString());
         if (item.ItemSubType >= 0)
@@ -516,7 +623,15 @@ public sealed class ItemAdderWindow : MonoBehaviour
         }
         DrawDetailLine(ref y, "可堆叠", item.Stackable ? "是" : "否");
         DrawDetailLine(ref y, "可转移", item.Transferable ? "是" : "否");
-        DrawDetailLine(ref y, "添加状态", item.Blocked ? $"不可添加：{item.BlockReason}" : "可添加");
+        DrawDetailLine(ref y, "常规生成", item.AllowRandomCreate ? "是" : "否");
+        DrawDetailLine(ref y, "玄品", item.IsMystery ? "是" : "否");
+        DrawDetailLine(ref y, "任务锁", item.HasTaskLock ? "有" : "无");
+        DrawDetailLine(ref y, "添加状态", item.Safety switch
+        {
+            ItemSafetyLevel.Locked => $"不可添加：{item.SafetyReason}",
+            ItemSafetyLevel.Caution => $"确认后可添加 1 个：{item.SafetyReason}",
+            _ => "可添加"
+        });
 
         if (!string.IsNullOrEmpty(item.Description))
         {
@@ -581,6 +696,16 @@ public sealed class ItemAdderWindow : MonoBehaviour
         return grade >= 0 && grade < GradeColors.Length ? GradeColors[grade] : "#ffffff";
     }
 
+    private static string GetSafetyDisplayName(ItemSafetyLevel safety)
+    {
+        return safety switch
+        {
+            ItemSafetyLevel.Caution => "需确认",
+            ItemSafetyLevel.Locked => "剧情锁定",
+            _ => "可添加"
+        };
+    }
+
     private string GetSelectedText()
     {
         if (_selectedItem == null)
@@ -589,6 +714,63 @@ public sealed class ItemAdderWindow : MonoBehaviour
         }
 
         return $"当前：{_selectedItem.Name} / {_selectedItem.TypeName} / {GetGradeName(_selectedItem.Grade)}";
+    }
+
+    private void DrawRiskConfirmation(Rect content)
+    {
+        ItemEntry item = _pendingRiskItem;
+        if (item == null)
+        {
+            return;
+        }
+
+        Event current = Event.current;
+        if (current != null && current.type == EventType.KeyDown && current.keyCode == KeyCode.Escape)
+        {
+            _pendingRiskItem = null;
+            _status = "已取消风险物品添加。";
+            current.Use();
+            return;
+        }
+
+        GUI.Box(content, GUIContent.none, _modalStyle);
+        const float modalWidth = 560f;
+        const float modalHeight = 310f;
+        Rect modal = new Rect(
+            content.x + (content.width - modalWidth) * 0.5f,
+            content.y + (content.height - modalHeight) * 0.5f,
+            modalWidth,
+            modalHeight);
+        GUI.Box(modal, GUIContent.none, _listBoxStyle);
+
+        float x = modal.x + 24f;
+        float y = modal.y + 20f;
+        float width = modal.width - 48f;
+        GUI.Label(new Rect(x, y, width, 28f), "确认添加风险物品", _detailTitleStyle);
+        y += 36f;
+        GUI.Label(new Rect(x, y, width, 26f), $"<color=#f2c15b>{item.Name}</color>  type={item.ItemType} id={item.TemplateId}", _detailLabelStyle);
+        y += 34f;
+        GUI.Label(new Rect(x, y, width, 118f),
+            "该物品可能是唯一剧情奖励、玄品宝物或非常规生成物品。\n" +
+            "提前或重复获得可能破坏正常解锁节奏，并影响平衡、仓库数据或后续奖励判定。\n" +
+            "Mod 只会创建 1 个物品，不会自动回滚由此产生的变化。",
+            _detailLabelStyle);
+        y += 126f;
+        GUI.Label(new Rect(x, y, width, 22f), $"风险原因：{item.SafetyReason}", _mutedStyle);
+        y += 34f;
+
+        if (GUI.Button(new Rect(x, y, 190f, 32f), "取消", _secondaryButtonStyle))
+        {
+            _pendingRiskItem = null;
+            _status = "已取消风险物品添加。";
+        }
+
+        if (GUI.Button(new Rect(modal.xMax - 244f, y, 220f, 32f), "仍然添加 1 个", _primaryButtonStyle))
+        {
+            ItemEntry confirmedItem = _pendingRiskItem;
+            _pendingRiskItem = null;
+            ConfirmRiskAdd(confirmedItem);
+        }
     }
 
     private void CaptureHotkey(Event current)
@@ -776,6 +958,15 @@ public sealed class ItemAdderWindow : MonoBehaviour
         _warningBadgeStyle.normal.textColor = new Color(1f, 0.86f, 0.40f);
         _warningBadgeStyle.hover.textColor = _warningBadgeStyle.normal.textColor;
         _warningBadgeStyle.active.textColor = _warningBadgeStyle.normal.textColor;
+
+        _lockedBadgeStyle = new GUIStyle(_warningBadgeStyle);
+        ApplyStateTextures(_lockedBadgeStyle, new Color(0.45f, 0.10f, 0.08f, 1f), new Color(0.55f, 0.13f, 0.10f, 1f), new Color(0.55f, 0.13f, 0.10f, 1f));
+        _lockedBadgeStyle.normal.textColor = new Color(1f, 0.58f, 0.52f);
+        _lockedBadgeStyle.hover.textColor = _lockedBadgeStyle.normal.textColor;
+        _lockedBadgeStyle.active.textColor = _lockedBadgeStyle.normal.textColor;
+
+        _modalStyle = new GUIStyle(GUI.skin.box);
+        _modalStyle.normal.background = MakeTex(new Color(0.02f, 0.02f, 0.02f, 0.82f));
     }
 
     private static void ApplyStateTextures(GUIStyle style, Color normal, Color hover, Color active)
@@ -897,34 +1088,56 @@ public sealed class ItemAdderWindow : MonoBehaviour
         try
         {
             string[] lines = File.ReadAllLines(path);
-            if (lines.Length == 0 || lines[0] != CacheHeader)
+            if (lines.Length < 4 || lines[0] != CacheHeader)
             {
-                _staticCacheStatus = "物品缓存版本不匹配，请点击刷新重建。";
-                ModLogger.Warn("物品缓存版本不匹配或文件为空，将等待用户刷新重建。");
+                _staticCacheStatus = "物品缓存版本变化，将自动重建。";
+                ModLogger.Warn("物品缓存格式版本不匹配或文件不完整，将自动重建。");
                 return;
             }
 
-            for (int i = 1; i < lines.Length; i++)
+            string cachedMvid = ReadCacheMetadata(lines[1], CacheMvidPrefix, "游戏程序集 MVID");
+            string cachedRule = ReadCacheMetadata(lines[2], CacheRulePrefix, "安全规则版本");
+            string countText = ReadCacheMetadata(lines[3], CacheCountPrefix, "物品总数");
+            if (!int.TryParse(countText, out int expectedCount) || expectedCount < 0)
             {
-                if (string.IsNullOrEmpty(lines[i]))
+                throw new InvalidDataException("缓存物品总数无效。");
+            }
+
+            string currentMvid = GetGameDataMvid();
+            if (!string.Equals(cachedMvid, currentMvid, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(cachedRule, CacheRuleVersion, StringComparison.Ordinal))
+            {
+                _staticCacheStatus = "游戏或安全规则版本变化，将自动重建物品缓存。";
+                ModLogger.Warn($"物品缓存已失效，将自动重建。cachedMvid={cachedMvid}, currentMvid={currentMvid}, cachedRule={cachedRule}, currentRule={CacheRuleVersion}");
+                return;
+            }
+
+            for (int i = 4; i < lines.Length; i++)
+            {
+                if (string.IsNullOrWhiteSpace(lines[i]))
                 {
                     continue;
                 }
 
                 string[] parts = lines[i].Split('\t');
-                if (parts.Length < 17)
+                if (parts.Length != 23)
                 {
-                    ModLogger.Warn($"跳过格式不完整的物品缓存行：line={i + 1}");
-                    continue;
+                    throw new InvalidDataException($"缓存行字段数量错误：line={i + 1}, fields={parts.Length}");
                 }
 
                 sbyte itemType = sbyte.Parse(parts[0]);
                 short templateId = short.Parse(parts[1]);
                 sbyte grade = sbyte.Parse(parts[2]);
-                bool blocked = parts[3] == "1";
+                int safetyValue = int.Parse(parts[3]);
+                if (safetyValue < (int)ItemSafetyLevel.Normal || safetyValue > (int)ItemSafetyLevel.Locked)
+                {
+                    throw new InvalidDataException($"缓存安全等级无效：line={i + 1}, safety={safetyValue}");
+                }
+
+                ItemSafetyLevel safety = (ItemSafetyLevel)safetyValue;
                 string icon = Decode(parts[4]);
                 string name = Decode(parts[5]);
-                string blockReason = Decode(parts[6]);
+                string safetyReason = Decode(parts[6]);
                 short itemSubType = short.Parse(parts[7]);
                 short groupId = short.Parse(parts[8]);
                 int baseValue = int.Parse(parts[9]);
@@ -935,6 +1148,12 @@ public sealed class ItemAdderWindow : MonoBehaviour
                 bool transferable = parts[14] == "1";
                 string description = Decode(parts[15]);
                 string functionDesc = Decode(parts[16]);
+                bool isSpecial = parts[17] == "1";
+                bool isMystery = parts[18] == "1";
+                bool hasTaskLock = parts[19] == "1";
+                bool allowRandomCreate = parts[20] == "1";
+                bool isVirtual = parts[21] == "1";
+                bool canTriggerCommonEvent = parts[22] == "1";
 
                 CachedItems.Add(new ItemEntry
                 {
@@ -954,9 +1173,20 @@ public sealed class ItemAdderWindow : MonoBehaviour
                     Description = description,
                     FunctionDesc = functionDesc,
                     TypeName = itemType >= 0 && itemType < TypeNames.Length ? TypeNames[itemType] : "未知",
-                    Blocked = blocked,
-                    BlockReason = blockReason
+                    Safety = safety,
+                    SafetyReason = safetyReason,
+                    IsSpecial = isSpecial,
+                    IsMystery = isMystery,
+                    HasTaskLock = hasTaskLock,
+                    AllowRandomCreate = allowRandomCreate,
+                    IsVirtual = isVirtual,
+                    CanTriggerCommonEvent = canTriggerCommonEvent
                 });
+            }
+
+            if (CachedItems.Count != expectedCount)
+            {
+                throw new InvalidDataException($"缓存物品总数不一致：expected={expectedCount}, actual={CachedItems.Count}");
             }
 
             _staticCacheStatus = $"已从磁盘缓存载入 {CachedItems.Count} 个物品配置。";
@@ -964,8 +1194,8 @@ public sealed class ItemAdderWindow : MonoBehaviour
         catch (Exception ex)
         {
             CachedItems.Clear();
-            _staticCacheStatus = "读取物品缓存失败，请点击刷新重建。";
-            ModLogger.Warn("读取物品缓存失败。", ex);
+            _staticCacheStatus = "读取物品缓存失败，将自动重建。";
+            ModLogger.Warn("读取物品缓存失败，将自动重建。", ex);
         }
     }
 
@@ -979,7 +1209,13 @@ public sealed class ItemAdderWindow : MonoBehaviour
 
         try
         {
-            List<string> lines = new List<string>(CachedItems.Count + 1) { CacheHeader };
+            List<string> lines = new List<string>(CachedItems.Count + 4)
+            {
+                CacheHeader,
+                CacheMvidPrefix + GetGameDataMvid(),
+                CacheRulePrefix + CacheRuleVersion,
+                CacheCountPrefix + CachedItems.Count
+            };
             foreach (ItemEntry item in CachedItems)
             {
                 lines.Add(string.Join("\t", new[]
@@ -987,10 +1223,10 @@ public sealed class ItemAdderWindow : MonoBehaviour
                     item.ItemType.ToString(),
                     item.TemplateId.ToString(),
                     item.Grade.ToString(),
-                    item.Blocked ? "1" : "0",
+                    ((int)item.Safety).ToString(),
                     Encode(item.Icon),
                     Encode(item.Name),
-                    Encode(item.BlockReason),
+                    Encode(item.SafetyReason),
                     item.ItemSubType.ToString(),
                     item.GroupId.ToString(),
                     item.BaseValue.ToString(),
@@ -1000,7 +1236,13 @@ public sealed class ItemAdderWindow : MonoBehaviour
                     item.Stackable ? "1" : "0",
                     item.Transferable ? "1" : "0",
                     Encode(item.Description),
-                    Encode(item.FunctionDesc)
+                    Encode(item.FunctionDesc),
+                    item.IsSpecial ? "1" : "0",
+                    item.IsMystery ? "1" : "0",
+                    item.HasTaskLock ? "1" : "0",
+                    item.AllowRandomCreate ? "1" : "0",
+                    item.IsVirtual ? "1" : "0",
+                    item.CanTriggerCommonEvent ? "1" : "0"
                 }));
             }
 
@@ -1009,6 +1251,29 @@ public sealed class ItemAdderWindow : MonoBehaviour
         catch (Exception ex)
         {
             ModLogger.Warn("保存物品缓存失败。", ex);
+        }
+    }
+
+    private static string ReadCacheMetadata(string line, string prefix, string label)
+    {
+        if (string.IsNullOrEmpty(line) || !line.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            throw new InvalidDataException($"缓存缺少{label}。");
+        }
+
+        return line.Substring(prefix.Length);
+    }
+
+    private static string GetGameDataMvid()
+    {
+        try
+        {
+            return typeof(IItemConfig).Assembly.ManifestModule.ModuleVersionId.ToString("D");
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Warn("读取 GameData.Shared.dll MVID 失败。", ex);
+            return string.Empty;
         }
     }
 
@@ -1073,20 +1338,22 @@ public sealed class ItemAdderWindow : MonoBehaviour
     {
         _filtered.Clear();
         string keyword = (_search ?? string.Empty).Trim();
+        bool searching = keyword.Length > 0;
+        UpdateSafetyCounts();
 
         foreach (ItemEntry item in _items)
         {
-            if (_selectedType >= 0 && item.ItemType != _selectedType)
+            if (!searching && _selectedType >= 0 && item.ItemType != _selectedType)
             {
                 continue;
             }
 
-            if (_selectedGrade >= 0 && item.Grade != _selectedGrade)
+            if (!searching && _selectedGrade >= 0 && item.Grade != _selectedGrade)
             {
                 continue;
             }
 
-            if (!_showBlocked && item.Blocked)
+            if (!searching && _selectedSafety >= 0 && (int)item.Safety != _selectedSafety)
             {
                 continue;
             }
@@ -1102,6 +1369,28 @@ public sealed class ItemAdderWindow : MonoBehaviour
         }
 
         _scroll.y = Mathf.Max(0f, _scroll.y);
+    }
+
+    private void UpdateSafetyCounts()
+    {
+        _normalCount = 0;
+        _cautionCount = 0;
+        _lockedCount = 0;
+        foreach (ItemEntry item in _items)
+        {
+            switch (item.Safety)
+            {
+                case ItemSafetyLevel.Caution:
+                    _cautionCount++;
+                    break;
+                case ItemSafetyLevel.Locked:
+                    _lockedCount++;
+                    break;
+                default:
+                    _normalCount++;
+                    break;
+            }
+        }
     }
 
     private void StepAmount(int delta)
@@ -1129,9 +1418,19 @@ public sealed class ItemAdderWindow : MonoBehaviour
             return;
         }
 
-        if (item.Blocked)
+        if (item.Safety == ItemSafetyLevel.Locked)
         {
-            _status = $"已阻止添加：{item.Name}，原因：{item.BlockReason}";
+            _status = $"已阻止添加：{item.Name}，原因：{item.SafetyReason}";
+            ModLogger.Warn($"已阻止剧情锁定物品添加。type={item.ItemType}, id={item.TemplateId}, name={item.Name}, reason={item.SafetyReason}");
+            return;
+        }
+
+        if (item.Safety == ItemSafetyLevel.Caution)
+        {
+            SetAmount(1);
+            _pendingRiskItem = item;
+            _captureHotkey = false;
+            _status = $"请确认是否添加风险物品：{item.Name}";
             return;
         }
 
@@ -1144,10 +1443,56 @@ public sealed class ItemAdderWindow : MonoBehaviour
 
         amount = Math.Min(amount, 9999);
         SetAmount(amount);
+        CreateItem(item, amount, riskConfirmed: false);
+    }
+
+    private void ConfirmRiskAdd(ItemEntry item)
+    {
+        if (item == null)
+        {
+            _status = "风险物品确认已失效，请重新选择。";
+            return;
+        }
+
+        if (item.Safety != ItemSafetyLevel.Caution)
+        {
+            _status = "物品安全状态已经变化，请刷新后重试。";
+            ModLogger.Warn($"风险确认被拒绝：安全状态不匹配。type={item.ItemType}, id={item.TemplateId}, name={item.Name}, safety={item.Safety}");
+            return;
+        }
+
+        ModLogger.Warn($"用户确认添加风险物品。type={item.ItemType}, id={item.TemplateId}, name={item.Name}, reason={item.SafetyReason}");
+        SetAmount(1);
+        CreateItem(item, 1, riskConfirmed: true);
+    }
+
+    private void CreateItem(ItemEntry item, int amount, bool riskConfirmed)
+    {
+        if (item == null)
+        {
+            return;
+        }
+
+        if (item.Safety == ItemSafetyLevel.Locked)
+        {
+            _status = $"已阻止添加：{item.Name}，原因：{item.SafetyReason}";
+            ModLogger.Warn($"调用官方接口前拦截剧情锁定物品。type={item.ItemType}, id={item.TemplateId}, name={item.Name}, reason={item.SafetyReason}");
+            return;
+        }
+
+        if (item.Safety == ItemSafetyLevel.Caution && !riskConfirmed)
+        {
+            _status = "风险物品必须经过确认后才能添加。";
+            ModLogger.Warn($"调用官方接口前拦截未经确认的风险物品。type={item.ItemType}, id={item.TemplateId}, name={item.Name}");
+            return;
+        }
+
+        amount = item.Safety == ItemSafetyLevel.Caution ? 1 : Math.Max(1, Math.Min(amount, 9999));
 
         try
         {
-            int taiwuCharId = SingletonObject.getInstance<BasicGameData>().TaiwuCharId;
+            BasicGameData basicGameData = SingletonObject.getInstance<BasicGameData>();
+            int taiwuCharId = basicGameData == null ? -1 : basicGameData.TaiwuCharId;
             if (taiwuCharId <= 0)
             {
                 _status = "当前还没有可用的太吾角色 ID，请进入存档后再添加。";
@@ -1172,6 +1517,13 @@ public sealed class ItemAdderWindow : MonoBehaviour
         }
     }
 
+    private enum ItemSafetyLevel
+    {
+        Normal = 0,
+        Caution = 1,
+        Locked = 2
+    }
+
     private sealed class ItemEntry
     {
         public string Name;
@@ -1190,12 +1542,32 @@ public sealed class ItemAdderWindow : MonoBehaviour
         public string Description;
         public string FunctionDesc;
         public string TypeName;
-        public bool Blocked;
-        public string BlockReason;
+        public ItemSafetyLevel Safety;
+        public string SafetyReason;
+        public bool IsSpecial;
+        public bool IsMystery;
+        public bool HasTaskLock;
+        public bool AllowRandomCreate;
+        public bool IsVirtual;
+        public bool CanTriggerCommonEvent;
 
         public static ItemEntry FromConfig(IItemConfig config)
         {
-            string reason = GetBlockReason(config);
+            bool isSpecial = GetBoolField(config, "IsSpecial");
+            bool isMystery = config.MysteryEffectId >= 0;
+            bool hasTaskLock = config.TaskLock != null && config.TaskLock.Count > 0;
+            bool allowRandomCreate = GetBoolField(config, "AllowRandomCreate", true);
+            bool isVirtual = GetBoolField(config, "IsVirtual");
+            bool canTriggerCommonEvent = GetBoolField(config, "CanTriggerCommonEvent");
+            (ItemSafetyLevel safety, string reason) = ClassifySafety(
+                config,
+                isSpecial,
+                isMystery,
+                hasTaskLock,
+                allowRandomCreate,
+                isVirtual,
+                canTriggerCommonEvent);
+
             return new ItemEntry
             {
                 Name = string.IsNullOrEmpty(config.Name) ? "(未命名)" : config.Name,
@@ -1214,8 +1586,14 @@ public sealed class ItemAdderWindow : MonoBehaviour
                 Description = GetStringField(config, "Desc"),
                 FunctionDesc = GetStringField(config, "FunctionDesc"),
                 TypeName = config.ItemType >= 0 && config.ItemType < TypeNames.Length ? TypeNames[config.ItemType] : "未知",
-                Blocked = reason.Length > 0,
-                BlockReason = reason
+                Safety = safety,
+                SafetyReason = reason,
+                IsSpecial = isSpecial,
+                IsMystery = isMystery,
+                HasTaskLock = hasTaskLock,
+                AllowRandomCreate = allowRandomCreate,
+                IsVirtual = isVirtual,
+                CanTriggerCommonEvent = canTriggerCommonEvent
             };
         }
 
@@ -1237,75 +1615,148 @@ public sealed class ItemAdderWindow : MonoBehaviour
             }
         }
 
-        private static string GetBlockReason(IItemConfig config)
+        private static (ItemSafetyLevel Safety, string Reason) ClassifySafety(
+            IItemConfig config,
+            bool isSpecial,
+            bool isMystery,
+            bool hasTaskLock,
+            bool allowRandomCreate,
+            bool isVirtual,
+            bool canTriggerCommonEvent)
         {
-            if (config.TaskLock != null && config.TaskLock.Count > 0)
+            if (isVirtual)
             {
-                return "任务锁";
+                return (ItemSafetyLevel.Locked, "虚拟/系统占位物品");
             }
 
-            if (HasTrueField(config, "IsSpecial"))
+            if (canTriggerCommonEvent)
             {
-                return "特殊物品";
+                return (ItemSafetyLevel.Locked, "会触发游戏事件");
             }
 
-            if (config.ItemType == 12)
+            if (hasTaskLock)
             {
-                if (ItemTemplateHelper.CheckIsHeavenlyTreeSeeds(config.ItemType, config.TemplateId) ||
-                    ItemTemplateHelper.CheckIsSectMainStoryItemXuannvNotes(config.ItemType, config.TemplateId) ||
-                    ItemTemplateHelper.CheckIsSectMainStoryItemWuxianWugFairy(config.ItemType, config.TemplateId) ||
-                    ItemTemplateHelper.CheckIsSectMainStoryFulongChickenMap(config.ItemType, config.TemplateId) ||
-                    ItemTemplateHelper.CheckIsSectMainStoryItemYuanshanRosary(config.ItemType, config.TemplateId) ||
-                    ItemTemplateHelper.CheckIsSectMainStoryItemJieQingStars(config.ItemType, config.TemplateId) ||
-                    ItemTemplateHelper.CheckIsDamageHugeSword(config.ItemType, config.TemplateId) ||
-                    ItemTemplateHelper.IsThanksLetter(config.ItemType, config.TemplateId))
-                {
-                    return "剧情/特殊杂物";
-                }
+                return (ItemSafetyLevel.Locked, "任务锁");
+            }
+
+            if (IsKnownStoryItem(config))
+            {
+                return (ItemSafetyLevel.Locked, "官方剧情关键物品");
+            }
+
+            if (config.ItemType == 2 && config.TemplateId >= 250 && config.TemplateId <= 282)
+            {
+                return (ItemSafetyLevel.Locked, "正式版剧情/收集物品");
             }
 
             string name = config.Name ?? string.Empty;
             if (name.Contains("剧情") || name.Contains("任务") || name.Contains("信物") || name.Contains("残卷"))
             {
-                return "疑似剧情物品";
+                return (ItemSafetyLevel.Locked, "疑似剧情物品");
             }
 
-            return string.Empty;
+            if (isMystery)
+            {
+                return (ItemSafetyLevel.Caution, "玄品/唯一奖励");
+            }
+
+            if (isSpecial)
+            {
+                return (ItemSafetyLevel.Caution, "特殊奖励物品");
+            }
+
+            if (!GetBoolField(config, "Transferable") && !allowRandomCreate)
+            {
+                return (ItemSafetyLevel.Caution, "非流通/非常规生成");
+            }
+
+            return (ItemSafetyLevel.Normal, string.Empty);
         }
 
-        private static bool HasTrueField(object target, string fieldName)
+        private static bool IsKnownStoryItem(IItemConfig config)
+        {
+            if (config.ItemType != 12)
+            {
+                return false;
+            }
+
+            try
+            {
+                return ItemTemplateHelper.CheckIsHeavenlyTreeSeeds(config.ItemType, config.TemplateId) ||
+                       ItemTemplateHelper.CheckIsSectMainStoryItemXuannvNotes(config.ItemType, config.TemplateId) ||
+                       ItemTemplateHelper.CheckIsSectMainStoryItemWuxianWugFairy(config.ItemType, config.TemplateId) ||
+                       ItemTemplateHelper.CheckIsSectMainStoryFulongChickenMap(config.ItemType, config.TemplateId) ||
+                       ItemTemplateHelper.CheckIsSectMainStoryItemYuanshanRosary(config.ItemType, config.TemplateId) ||
+                       ItemTemplateHelper.CheckIsSectMainStoryItemJieQingStars(config.ItemType, config.TemplateId) ||
+                       ItemTemplateHelper.CheckIsDamageHugeSword(config.ItemType, config.TemplateId) ||
+                       ItemTemplateHelper.IsThanksLetter(config.ItemType, config.TemplateId);
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Warn($"调用官方剧情物品判定失败：type={config.ItemType}, id={config.TemplateId}", ex);
+                return false;
+            }
+        }
+
+        private static bool GetBoolField(object target, string fieldName, bool defaultValue = false)
         {
             var field = target.GetType().GetField(fieldName);
-            return field != null && field.FieldType == typeof(bool) && (bool)field.GetValue(target);
+            if (field != null && field.FieldType == typeof(bool))
+            {
+                return (bool)field.GetValue(target);
+            }
+
+            var property = target.GetType().GetProperty(fieldName);
+            return property != null && property.PropertyType == typeof(bool) && property.CanRead
+                ? (bool)property.GetValue(target)
+                : defaultValue;
         }
 
-        private static bool GetBoolField(object target, string fieldName)
-        {
-            var field = target.GetType().GetField(fieldName);
-            return field != null && field.FieldType == typeof(bool) && (bool)field.GetValue(target);
-        }
-
-        private static int GetIntField(object target, string fieldName)
+        private static int GetIntField(object target, string fieldName, int defaultValue = 0)
         {
             var field = target.GetType().GetField(fieldName);
             if (field == null)
             {
-                return 0;
+                var property = target.GetType().GetProperty(fieldName);
+                if (property == null || !property.CanRead)
+                {
+                    return defaultValue;
+                }
+
+                try
+                {
+                    object propertyValue = property.GetValue(target);
+                    return propertyValue == null ? defaultValue : Convert.ToInt32(propertyValue);
+                }
+                catch
+                {
+                    return defaultValue;
+                }
             }
 
             object value = field.GetValue(target);
-            return value is int intValue ? intValue : 0;
+            try
+            {
+                return value == null ? defaultValue : Convert.ToInt32(value);
+            }
+            catch
+            {
+                return defaultValue;
+            }
         }
 
         private static string GetStringField(object target, string fieldName)
         {
             var field = target.GetType().GetField(fieldName);
-            if (field == null || field.FieldType != typeof(string))
+            if (field != null && field.FieldType == typeof(string))
             {
-                return string.Empty;
+                return field.GetValue(target) as string ?? string.Empty;
             }
 
-            return field.GetValue(target) as string ?? string.Empty;
+            var property = target.GetType().GetProperty(fieldName);
+            return property != null && property.PropertyType == typeof(string) && property.CanRead
+                ? property.GetValue(target) as string ?? string.Empty
+                : string.Empty;
         }
     }
 

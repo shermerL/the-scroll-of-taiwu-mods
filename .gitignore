@@ -9,6 +9,8 @@
 **/*.runtimeconfig.json
 **/Plugins/*
 !**/Plugins/.gitkeep
+!TaiwuJiaJiaJia/ModPackage/TaiwuItemAdderFrontend/Plugins/
+!TaiwuJiaJiaJia/ModPackage/TaiwuItemAdderFrontend/Plugins/TaiwuItemAdderFrontend.dll
 !TaiwuGoodPartnerAyaYa/ModPackage/TaiwuGoodPartnerAya/Plugins/
 !TaiwuGoodPartnerAyaYa/ModPackage/TaiwuGoodPartnerAya/Plugins/TaiwuGoodPartnerAya.dll
 !TaiwuGoodPartnerAyaYa/ModPackage/TaiwuGoodPartnerAya/Events/
